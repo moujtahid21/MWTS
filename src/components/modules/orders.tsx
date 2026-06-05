@@ -109,12 +109,146 @@ export function Orders() {
     setShowCreate(false); toast("Auftrag #" + id + " angelegt", "check");
   };
 
+  /* ============================================================
+     Export / Import
+     Libraries are dynamically imported so they are code-split out
+     of the initial client bundle and only fetched on first use —
+     which is also why the handlers are async.
+     Exports respect the active filters/search (we export `filtered`).
+     ============================================================ */
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Timestamp for filenames, e.g. 2026-06-05_14-22
+  const stamp = () => new Date().toISOString().slice(0, 16).replace("T", "_").replace(":", "-");
+
+  // Single source of truth for the exported shape. German headers map
+  // directly to the spreadsheet columns / PDF table headers.
+  const toRow = (o) => ({
+    "ID": o.id,
+    "MV-Nr.": o.mvNr,
+    "Kennzeichen": o.plate,
+    "Modell": o.model,
+    "Abholort": `${o.from.plz} ${o.from.city}`,
+    "Anlieferort": `${o.to.plz} ${o.to.city}`,
+    "Kunde": o.auftraggeber,
+    "Fahrer": o.driver ? o.driver.name : "—",
+    "Datum": o.pickupDate ? fmtDate(o.pickupDate) : "undefiniert",
+    "Status": D.statusMap[o.status]?.label ?? o.status,
+    "Preis (€)": o.price,
+  });
+
+  const exportToExcel = async () => {
+    try {
+      const XLSX = await import("xlsx");
+      const rows = filtered.map(toRow);
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws["!cols"] = [{ wch: 9 }, { wch: 12 }, { wch: 13 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 20 }, { wch: 22 }, { wch: 13 }, { wch: 18 }, { wch: 10 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Aufträge");
+      XLSX.writeFile(wb, `MW-Auftraege_${stamp()}.xlsx`);
+      toast(rows.length + " Aufträge als Excel exportiert", "excel");
+    } catch (err) {
+      console.error(err);
+      toast("Excel-Export fehlgeschlagen", "x");
+    }
+  };
+
+  const exportToCSV = async () => {
+    try {
+      const XLSX = await import("xlsx");
+      const rows = filtered.map(toRow);
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Aufträge");
+      // bookType csv emits a UTF-8 CSV with BOM so Umlaute open cleanly in Excel
+      XLSX.writeFile(wb, `MW-Auftraege_${stamp()}.csv`, { bookType: "csv" });
+      toast(rows.length + " Aufträge als CSV exportiert", "documents");
+    } catch (err) {
+      console.error(err);
+      toast("CSV-Export fehlgeschlagen", "x");
+    }
+  };
+
+  const exportToPDF = async () => {
+    try {
+      const { jsPDF } = await import("jspdf");
+      const autoTable = (await import("jspdf-autotable")).default;
+      const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+
+      // Header
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(15);
+      doc.text("MW Transport Service — Auftragsübersicht", 40, 40);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(120);
+      doc.text(`${filtered.length} Aufträge · Stand ${fmtDate(new Date().toISOString().slice(0, 10))}`, 40, 56);
+
+      autoTable(doc, {
+        startY: 72,
+        head: [["ID", "Kennzeichen", "Strecke", "Kunde", "Datum", "Status"]],
+        body: filtered.map(o => [
+          String(o.id),
+          o.plate,
+          `${o.from.city} → ${o.to.city}`,
+          o.auftraggeber,
+          o.pickupDate ? fmtDate(o.pickupDate) : "undefiniert",
+          D.statusMap[o.status]?.label ?? o.status,
+        ]),
+        styles: { fontSize: 8.5, cellPadding: 5, lineColor: [228, 228, 231], lineWidth: 0.5, textColor: [39, 39, 42] },
+        headStyles: { fillColor: [24, 24, 27], textColor: [255, 255, 255], fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [250, 250, 250] },
+        columnStyles: { 0: { cellWidth: 60, fontStyle: "bold" }, 1: { cellWidth: 80 }, 4: { cellWidth: 80 } },
+        margin: { left: 40, right: 40 },
+        didDrawPage: (data) => {
+          const page = doc.getNumberOfPages();
+          doc.setFontSize(8);
+          doc.setTextColor(150);
+          doc.text(`Seite ${page}`, doc.internal.pageSize.getWidth() - 60, doc.internal.pageSize.getHeight() - 20);
+        },
+      });
+
+      doc.save(`MW-Auftraege_${stamp()}.pdf`);
+      toast(filtered.length + " Aufträge als PDF exportiert", "pdf");
+    } catch (err) {
+      console.error(err);
+      toast("PDF-Export fehlgeschlagen", "x");
+    }
+  };
+
+  // Reads the chosen .xlsx/.xls/.csv, converts the first sheet to JSON and
+  // logs it — placeholder for the upcoming Supabase mutation.
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const XLSX = await import("xlsx");
+        const data = new Uint8Array(ev.target.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(ws, { defval: "" });
+        // TODO: replace with Supabase mutation (e.g. supabase.from('orders').upsert(json))
+        console.log("[Import] Parsed rows from", file.name, json);
+        toast(json.length + " Zeilen importiert · siehe Konsole", "check");
+      } catch (err) {
+        console.error(err);
+        toast("Import fehlgeschlagen — Datei prüfen", "x");
+      }
+    };
+    reader.onerror = () => toast("Datei konnte nicht gelesen werden", "x");
+    reader.readAsArrayBuffer(file);
+    e.target.value = ""; // allow re-selecting the same file
+  };
+
   return (
     <div>
       <PageHead title="Auftragsverwaltung" sub={filtered.length.toLocaleString("de-DE") + " von " + orders.length.toLocaleString("de-DE") + " Aufträgen"}>
         <Menu align="right" trigger={<button className="btn"><Icon name="download" size={15} />Export <Icon name="chevDown" size={13} /></button>}
-          items={[{ icon: "excel", label: "Als Excel (.xlsx)", onClick: () => toast("Excel-Export gestartet", "excel") }, { icon: "pdf", label: "Als PDF", onClick: () => toast("PDF wird erzeugt", "pdf") }, { icon: "documents", label: "Als CSV", onClick: () => toast("CSV-Export gestartet", "documents") }]} />
-        <button className="btn" onClick={() => toast("Excel-Import: Datei wählen", "upload")}><Icon name="upload" size={15} />Import</button>
+          items={[{ icon: "excel", label: "Als Excel (.xlsx)", onClick: exportToExcel }, { icon: "pdf", label: "Als PDF", onClick: exportToPDF }, { icon: "documents", label: "Als CSV", onClick: exportToCSV }]} />
+        <button className="btn" onClick={() => fileInputRef.current?.click()}><Icon name="upload" size={15} />Import</button>
+        <input ref={fileInputRef} type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUpload} style={{ display: "none" }} />
         <button className="btn btn-primary" onClick={() => setShowCreate(true)}><Icon name="plus" size={16} />Neuer Auftrag</button>
       </PageHead>
 
@@ -150,7 +284,7 @@ export function Orders() {
           <span className="t-strong">{sel.size} ausgewählt</span>
           <div className="spacer" style={{ flex: 1 }} />
           <button className="btn btn-sm" onClick={() => { setAssignFor("bulk"); }}><Icon name="drivers" size={14} />Fahrer zuweisen</button>
-          <button className="btn btn-sm" onClick={() => toast(sel.size + " Aufträge exportiert", "download")}><Icon name="download" size={14} />Export</button>
+          <button className="btn btn-sm" onClick={async () => { try { const XLSX = await import("xlsx"); const rows = orders.filter(o => sel.has(o.id)).map(toRow); const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Auswahl"); XLSX.writeFile(wb, `MW-Auswahl_${stamp()}.xlsx`); toast(rows.length + " Aufträge exportiert", "excel"); } catch (err) { console.error(err); toast("Export fehlgeschlagen", "x"); } }}><Icon name="download" size={14} />Export</button>
           <button className="btn btn-sm btn-danger" onClick={() => { setOrders(os => os.map(o => sel.has(o.id) ? { ...o, status: "storniert" } : o)); toast(sel.size + " storniert", "x"); setSel(new Set()); }}><Icon name="trash" size={14} />Stornieren</button>
           <button className="btn btn-sm btn-ghost" onClick={() => setSel(new Set())}>Abwählen</button>
         </div>
