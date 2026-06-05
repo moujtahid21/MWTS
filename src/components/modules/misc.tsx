@@ -9,6 +9,7 @@ import {
 } from "@/components/ui";
 import { MWDATA } from "@/lib/data";
 import { useAppNav } from "@/lib/use-app-nav";
+import Link from "next/link";
 
 
 /* ============ KALENDER (Verfügbarkeiten) ============ */
@@ -33,7 +34,7 @@ export function CalendarView() {
       <PageHead title="Verfügbarkeits-Kalender" sub="KW 23 · 02.–08. Juni 2026 · klicken zum Umschalten">
         <button className="btn"><Icon name="chevLeft" size={15} />Vorwoche</button>
         <button className="btn">Nächste Woche<Icon name="chevRight" size={15} /></button>
-        <button className="btn btn-primary" onClick={() => toast("Schichtplanung folgt in Phase 2", "calendar")}><Icon name="plus" size={16} />Schicht planen</button>
+        <Link href="/shiftplanner" className="btn btn-primary"><Icon name="plus" size={16} />Schicht planen</Link>
       </PageHead>
 
       <div className="flex gap-sm" style={{ marginBottom: "var(--gap)" }}>
