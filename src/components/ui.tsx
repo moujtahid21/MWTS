@@ -1,7 +1,7 @@
 "use client";
 
 /* MW Transport Service — shared UI components. Ported from app/ui.jsx */
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, useId } from "react";
 import { Icon } from "./icon";
 import { MWDATA } from "@/lib/data";
 
@@ -88,7 +88,6 @@ export function ToastProvider({ children }) {
 }
 export const useToast = () => React.useContext(ToastCtx);
 
-/* ---- Sparkline ---- */
 export function Sparkline({ data, w = 220, h = 56, fill = true }) {
   const max = Math.max(...data), min = Math.min(...data);
   const rng = max - min || 1;
@@ -96,20 +95,24 @@ export function Sparkline({ data, w = 220, h = 56, fill = true }) {
   const pts = data.map((v, i) => [i * step, h - 4 - ((v - min) / rng) * (h - 10)]);
   const line = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
   const area = line + ` L ${w} ${h} L 0 ${h} Z`;
-  const gid = "sg" + useMemo(() => Math.random().toString(36).slice(2, 7), []);
+  
+  const rawId = useId();
+  const gid = `sg-${rawId.replace(/:/g, "")}`; 
+
   return (
     <svg width={w} height={h} style={{ display: "block", overflow: "visible" }}>
-      <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.22" />
-        <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0" />
-      </linearGradient></defs>
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.22" />
+          <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
       {fill && <path d={area} fill={`url(#${gid})`} />}
       <path d={line} fill="none" stroke="var(--color-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       <circle cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r="3" fill="var(--color-primary)" />
     </svg>
   );
 }
-
 /* ---- Bars ---- */
 export function MiniBars({ data, h = 60 }) {
   const max = Math.max(...data) || 1;
