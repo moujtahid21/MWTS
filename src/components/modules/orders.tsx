@@ -9,6 +9,11 @@ import {
 } from "@/components/ui";
 import { MWDATA } from "@/lib/data";
 import { useAppNav, useModuleInitial } from "@/lib/use-app-nav";
+import {
+  getOrders, createOrder as createOrderAction, cancelOrder as cancelOrderAction,
+  assignOrderDriver, updateOrdersStatus,
+} from "@/actions/order-actions";
+import type { OrderVM } from "@/lib/supabase/types";
 
 function OrderStatStrip({ kpi }) {
   const items = [
@@ -28,30 +33,98 @@ function OrderStatStrip({ kpi }) {
   );
 }
 
+/* Loading skeleton — mirrors the 10-column order table layout. */
+function OrderSkeletonRows({ rows = 8 }: { rows?: number }) {
+  const bar = (w: number | string) => (
+    <span style={{ display: "block", height: 11, width: w, borderRadius: 5, background: "var(--border)", opacity: 0.7, animation: "mwtPulse 1.2s ease-in-out infinite" }} />
+  );
+  return (
+    <React.Fragment>
+      <style>{"@keyframes mwtPulse{0%,100%{opacity:.45}50%{opacity:.9}}"}</style>
+      {Array.from({ length: rows }).map((_, i) => (
+        <tr key={"sk" + i}>
+          <td><span className="checkbox" /></td>
+          <td>{bar(54)}</td>
+          <td>{bar(90)}</td>
+          <td>{bar("70%")}</td>
+          <td>{bar(72)}</td>
+          <td>{bar("60%")}</td>
+          <td>{bar(80)}</td>
+          <td>{bar(70)}</td>
+          <td style={{ textAlign: "right" }}>{bar(40)}</td>
+          <td>{bar(48)}</td>
+        </tr>
+      ))}
+    </React.Fragment>
+  );
+}
+
 export function Orders() {
   const onNav = useAppNav();
   const initial = useModuleInitial();
-  const kpi = MWDATA.kpi;
+  // Lookup/config lists (status labels, dropdown sources, driver pool for the
+  // assignment picker) stay as tenant config constants for now — only the
+  // live order records move to Supabase in this phase.
   const D = MWDATA;
   const toast = useToast();
-  const [orders, setOrders] = useState(D.orders);
+  const [orders, setOrders] = useState<OrderVM[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [fStatus, setFStatus] = useState(initial?.filter || "all");
   const [fType, setFType] = useState("all");
   const [fAuftraggeber, setFAuftraggeber] = useState("all");
   const [fBundesland, setFBundesland] = useState("all");
-  const [sel, setSel] = useState(new Set());
+  const [sel, setSel] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState({ k: "id", dir: "desc" });
   const [showCreate, setShowCreate] = useState(!!initial?.create);
-  const [detail, setDetail] = useState(null);
-  const [assignFor, setAssignFor] = useState(null);
+  const [detail, setDetail] = useState<OrderVM | null>(null);
+  const [assignFor, setAssignFor] = useState<string | "bulk" | null>(null);
+
+  // Fetch tenant-scoped orders from Supabase via the Server Action.
+  const load = useCallback(async () => {
+    setLoading(true);
+    const res = await getOrders();
+    if (res.error) {
+      setLoadError(res.error);
+      setOrders([]);
+    } else {
+      setLoadError(null);
+      setOrders(res.data ?? []);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    if (initial?.focus) { const o = orders.find(x => x.id === initial.focus); if (o) setDetail(o); }
     if (initial?.filter) setFStatus(initial.filter);
     if (initial?.auftraggeber) setFAuftraggeber(initial.auftraggeber);
     if (initial?.create) setShowCreate(true);
   }, [initial]);
+
+  // Open the requested order once it has loaded (deep-link / cross-module nav).
+  useEffect(() => {
+    if (initial?.focus && orders.length) {
+      const o = orders.find(x => String(x.orderNo) === String(initial.focus) || x.id === initial.focus);
+      if (o) setDetail(o);
+    }
+  }, [initial, orders]);
+
+  // KPI counters derived from the live tenant data set.
+  const kpi = useMemo(() => {
+    const by = (s: string) => orders.filter(o => o.status === s).length;
+    return {
+      total: orders.length,
+      assigned: orders.filter(o => o.driver).length,
+      unassigned: by("nicht_zugewiesen"),
+      auslagenOffen: orders.filter(o => o.refuel && o.status !== "storniert").length,
+      arbeitsnachweisOffen: orders.filter(o => o.arbeitsnachweis === "offen").length,
+      fertig: by("fertig"),
+      storniert: by("storniert"),
+      inaktiv: by("inaktiv"),
+    };
+  }, [orders]);
 
   const filtered = useMemo(() => {
     let r = orders.filter(o => {
@@ -61,7 +134,7 @@ export function Orders() {
       if (fBundesland !== "all" && o.bundesland !== fBundesland) return false;
       if (q) {
         const s = q.toLowerCase();
-        if (!(String(o.id).includes(s) || o.plate.toLowerCase().includes(s) || o.model.toLowerCase().includes(s) ||
+        if (!(String(o.orderNo).includes(s) || o.plate.toLowerCase().includes(s) || o.model.toLowerCase().includes(s) ||
           o.from.city.toLowerCase().includes(s) || o.to.city.toLowerCase().includes(s) || o.vin.toLowerCase().includes(s) ||
           (o.driver && o.driver.name.toLowerCase().includes(s)) || o.auftraggeber.toLowerCase().includes(s))) return false;
       }
@@ -74,7 +147,7 @@ export function Orders() {
         case "from": av = a.from.city; bv = b.from.city; break;
         case "date": av = a.pickupDate || ""; bv = b.pickupDate || ""; break;
         case "price": av = a.price; bv = b.price; break;
-        default: av = a.id; bv = b.id;
+        default: av = a.orderNo; bv = b.orderNo;
       }
       const c = av < bv ? -1 : av > bv ? 1 : 0;
       return sort.dir === "asc" ? c : -c;
@@ -96,17 +169,31 @@ export function Orders() {
   const activeFilters = [fStatus, fType, fAuftraggeber, fBundesland].filter(x => x !== "all").length + (q ? 1 : 0);
   const clearFilters = () => { setFStatus("all"); setFType("all"); setFAuftraggeber("all"); setFBundesland("all"); setQ(""); };
 
-  const assignDriver = (orderId, driver) => {
-    setOrders(os => os.map(o => o.id === orderId ? { ...o, driver, status: "zugewiesen", jobType: driver.type } : o));
+  // Assign a driver — optimistic UI, then persist via the Server Action.
+  const assignDriver = async (orderId, driver) => {
+    const patch = { driver, status: "zugewiesen", jobType: driver.type };
+    setOrders(os => os.map(o => o.id === orderId ? { ...o, ...patch } : o));
+    setDetail(d => d && d.id === orderId ? { ...d, ...patch } : d);
     setAssignFor(null);
-    setDetail(d => d && d.id === orderId ? { ...d, driver, status: "zugewiesen", jobType: driver.type } : d);
+    const res = await assignOrderDriver(orderId, { id: driver.id, name: driver.name, phone: driver.phone, city: driver.city, type: driver.type });
+    if (res.error) { toast(res.error, "x"); load(); return; }
     toast(driver.name.split(" ")[0] + " zugewiesen · Benachrichtigung gesendet", "send");
   };
-  const cancelOrder = (id) => { setOrders(os => os.map(o => o.id === id ? { ...o, status: "storniert" } : o)); setDetail(null); toast("Auftrag storniert", "x"); };
-  const createOrder = (data) => {
-    const id = Math.max(...orders.map(o => o.id)) + 1;
-    setOrders(os => [{ id, mvNr: data.mvNr, plate: data.plate, plateRaw: data.plate, model: data.model, vin: data.vin, auftraggeber: data.auftraggeber, from: { city: data.fromCity, plz: data.fromPlz, street: data.fromStreet }, to: { city: data.toCity, plz: data.toPlz, street: data.toStreet }, pickupDate: data.pickupDate || null, pickupWindow: null, deliveryDate: data.deliveryDate || null, status: "nicht_zugewiesen", driver: null, jobType: null, bundesland: data.bundesland, price: +data.price || 0, priceSelbst: 0, km: +data.km || 0, refuel: data.refuel, arbeitsnachweis: null, created: "2026-06-05" }, ...os]);
-    setShowCreate(false); toast("Auftrag #" + id + " angelegt", "check");
+
+  const cancelOrder = async (id) => {
+    setOrders(os => os.map(o => o.id === id ? { ...o, status: "storniert" } : o));
+    setDetail(null);
+    const res = await cancelOrderAction(id);
+    if (res.error) { toast(res.error, "x"); load(); return; }
+    toast("Auftrag storniert", "x");
+  };
+
+  const createOrder = async (data) => {
+    const res = await createOrderAction(data);
+    if (res.error || !res.data) { toast(res.error ?? "Auftrag konnte nicht angelegt werden.", "x"); return; }
+    setOrders(os => [res.data as OrderVM, ...os]);
+    setShowCreate(false);
+    toast("Auftrag #" + res.data.orderNo + " angelegt", "check");
   };
 
   /* ============================================================
@@ -124,7 +211,7 @@ export function Orders() {
   // Single source of truth for the exported shape. German headers map
   // directly to the spreadsheet columns / PDF table headers.
   const toRow = (o) => ({
-    "ID": o.id,
+    "ID": o.orderNo,
     "MV-Nr.": o.mvNr,
     "Kennzeichen": o.plate,
     "Modell": o.model,
@@ -188,7 +275,7 @@ export function Orders() {
         startY: 72,
         head: [["ID", "Kennzeichen", "Strecke", "Kunde", "Datum", "Status"]],
         body: filtered.map(o => [
-          String(o.id),
+          String(o.orderNo),
           o.plate,
           `${o.from.city} → ${o.to.city}`,
           o.auftraggeber,
@@ -216,8 +303,37 @@ export function Orders() {
     }
   };
 
-  // Reads the chosen .xlsx/.xls/.csv, converts the first sheet to JSON and
-  // logs it — placeholder for the upcoming Supabase mutation.
+  // Maps a parsed spreadsheet row (our German export headers, or close
+  // variants) to the CreateOrderInput the Server Action expects.
+  const sheetRowToInput = (r: Record<string, any>) => {
+    const get = (...keys: string[]) => {
+      for (const k of keys) {
+        const hit = Object.keys(r).find(rk => rk.trim().toLowerCase() === k.toLowerCase());
+        if (hit && r[hit] !== "" && r[hit] != null) return String(r[hit]).trim();
+      }
+      return "";
+    };
+    const splitLoc = (v: string) => {
+      // "40468 Düsseldorf" -> { plz, city }
+      const m = v.match(/^\s*(\d{4,5})\s+(.*)$/);
+      return m ? { plz: m[1], city: m[2] } : { plz: "", city: v };
+    };
+    const from = splitLoc(get("Abholort", "Von", "From"));
+    const to = splitLoc(get("Anlieferort", "Nach", "To"));
+    return {
+      mvNr: get("MV-Nr.", "MV", "MV-Nr"),
+      plate: get("Kennzeichen", "Plate"),
+      model: get("Modell", "Model", "Fahrzeug"),
+      auftraggeber: get("Kunde", "Auftraggeber", "Customer"),
+      fromCity: from.city, fromPlz: from.plz,
+      toCity: to.city, toPlz: to.plz,
+      bundesland: get("Bundesland"),
+      price: get("Preis (€)", "Preis", "Price"),
+    };
+  };
+
+  // Reads the chosen .xlsx/.xls/.csv, converts the first sheet to a JSON
+  // array, then loops the rows through the createOrder Server Action.
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -228,10 +344,22 @@ export function Orders() {
         const data = new Uint8Array(ev.target.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: "array" });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(ws, { defval: "" });
-        // TODO: replace with Supabase mutation (e.g. supabase.from('orders').upsert(json))
-        console.log("[Import] Parsed rows from", file.name, json);
-        toast(json.length + " Zeilen importiert · siehe Konsole", "check");
+        const json = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: "" });
+
+        if (json.length === 0) { toast("Die Datei enthält keine Datenzeilen.", "x"); e.target.value = ""; return; }
+
+        toast(json.length + " Zeilen werden importiert …", "upload");
+        let ok = 0; let failed = 0;
+        for (const row of json) {
+          const input = sheetRowToInput(row);
+          if (!input.model && !input.plate) { failed++; continue; }
+          const res = await createOrderAction(input);
+          if (res.error) failed++; else ok++;
+        }
+
+        await load(); // re-sync the table from the database
+        if (failed === 0) toast(ok + " Aufträge importiert", "check");
+        else toast(`${ok} importiert · ${failed} fehlgeschlagen`, ok ? "check" : "x");
       } catch (err) {
         console.error(err);
         toast("Import fehlgeschlagen — Datei prüfen", "x");
@@ -285,7 +413,7 @@ export function Orders() {
           <div className="spacer" style={{ flex: 1 }} />
           <button className="btn btn-sm" onClick={() => { setAssignFor("bulk"); }}><Icon name="drivers" size={14} />Fahrer zuweisen</button>
           <button className="btn btn-sm" onClick={async () => { try { const XLSX = await import("xlsx"); const rows = orders.filter(o => sel.has(o.id)).map(toRow); const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Auswahl"); XLSX.writeFile(wb, `MW-Auswahl_${stamp()}.xlsx`); toast(rows.length + " Aufträge exportiert", "excel"); } catch (err) { console.error(err); toast("Export fehlgeschlagen", "x"); } }}><Icon name="download" size={14} />Export</button>
-          <button className="btn btn-sm btn-danger" onClick={() => { setOrders(os => os.map(o => sel.has(o.id) ? { ...o, status: "storniert" } : o)); toast(sel.size + " storniert", "x"); setSel(new Set()); }}><Icon name="trash" size={14} />Stornieren</button>
+          <button className="btn btn-sm btn-danger" onClick={async () => { const ids = [...sel]; setOrders(os => os.map(o => sel.has(o.id) ? { ...o, status: "storniert" } : o)); setSel(new Set()); const res = await updateOrdersStatus(ids, "storniert"); if (res.error) { toast(res.error, "x"); load(); } else toast((res.data ?? ids.length) + " storniert", "x"); }}><Icon name="trash" size={14} />Stornieren</button>
           <button className="btn btn-sm btn-ghost" onClick={() => setSel(new Set())}>Abwählen</button>
         </div>
       )}
@@ -307,10 +435,10 @@ export function Orders() {
               <th style={{ width: 100 }}></th>
             </tr></thead>
             <tbody>
-              {filtered.map(o => (
+              {loading ? <OrderSkeletonRows rows={8} /> : filtered.map(o => (
                 <tr key={o.id} className={sel.has(o.id) ? "sel" : ""}>
                   <td><span className={"checkbox" + (sel.has(o.id) ? " on" : "")} onClick={() => toggleOne(o.id)} style={{ cursor: "pointer" }}>{sel.has(o.id) && <Icon name="check" size={12} sw={3} />}</span></td>
-                  <td><div className="t-mono t-strong" style={{ fontSize: 12.5 }}>{o.id}</div><div className="t-mut t-mono" style={{ fontSize: 10.5 }}>{o.mvNr}</div></td>
+                  <td><div className="t-mono t-strong" style={{ fontSize: 12.5 }}>{o.orderNo}</div><div className="t-mut t-mono" style={{ fontSize: 10.5 }}>{o.mvNr}</div></td>
                   <td style={{ cursor: "pointer" }} onClick={() => setDetail(o)}><Plate value={o.plate} /><div className="t-mut" style={{ fontSize: 11, marginTop: 3, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.model}</div></td>
                   <td style={{ cursor: "pointer" }} onClick={() => setDetail(o)}>
                     <div className="flex items-center gap-sm" style={{ gap: 6, fontSize: 12.5 }}><span className="dot-ind" style={{ background: "var(--info)" }} /><span className="t-strong">{o.from.city}</span><span className="t-mut">{o.from.plz}</span></div>
@@ -342,14 +470,26 @@ export function Orders() {
               ))}
             </tbody>
           </table>
-          {filtered.length === 0 && <Empty title="Keine Aufträge gefunden" sub="Passe Filter oder Suche an." />}
+          {!loading && filtered.length === 0 && (loadError
+            ? <Empty title="Aufträge konnten nicht geladen werden" sub={loadError} />
+            : <Empty title="Keine Aufträge gefunden" sub="Passe Filter oder Suche an." />)}
         </div>
         <div className="tbl-foot"><span>{filtered.length.toLocaleString("de-DE")} Aufträge</span><div style={{ flex: 1 }} /><span>Σ Preis: <b className="t-mono" style={{ color: "var(--fg)" }}>{fmtEur(filtered.reduce((s, o) => s + o.price, 0))}</b></span></div>
       </div>
 
       {showCreate && <OrderForm D={D} onClose={() => setShowCreate(false)} onSave={createOrder} />}
       {detail && <OrderDetail order={detail} onClose={() => setDetail(null)} onAssign={() => setAssignFor(detail.id)} onCancel={() => cancelOrder(detail.id)} />}
-      {assignFor && <AssignDriver D={D} onClose={() => setAssignFor(null)} onPick={(d) => { if (assignFor === "bulk") { setOrders(os => os.map(o => sel.has(o.id) ? { ...o, driver: d, status: "zugewiesen", jobType: d.type } : o)); toast(d.name.split(" ")[0] + " zu " + sel.size + " Aufträgen zugewiesen", "send"); setSel(new Set()); setAssignFor(null); } else assignDriver(assignFor, d); }} />}
+      {assignFor && <AssignDriver D={D} onClose={() => setAssignFor(null)} onPick={async (d) => {
+        if (assignFor === "bulk") {
+          const ids = [...sel];
+          setOrders(os => os.map(o => sel.has(o.id) ? { ...o, driver: d, status: "zugewiesen", jobType: d.type } : o));
+          setSel(new Set()); setAssignFor(null);
+          const results = await Promise.all(ids.map(id => assignOrderDriver(id, { id: d.id, name: d.name, phone: d.phone, city: d.city, type: d.type })));
+          const failed = results.filter(r => r.error).length;
+          if (failed) { toast(`${ids.length - failed} zugewiesen · ${failed} fehlgeschlagen`, "x"); load(); }
+          else toast(d.name.split(" ")[0] + " zu " + ids.length + " Aufträgen zugewiesen", "send");
+        } else assignDriver(assignFor, d);
+      }} />}
     </div>
   );
 }
@@ -403,7 +543,7 @@ function OrderForm({ D, onClose, onSave }) {
 function OrderDetail({ order, onClose, onAssign, onCancel }) {
   const o = order;
   return (
-    <Modal title={"Auftrag #" + o.id} sub={o.mvNr + " · " + o.auftraggeber} onClose={onClose}
+    <Modal title={"Auftrag #" + o.orderNo} sub={o.mvNr + " · " + o.auftraggeber} onClose={onClose}
       footer={<React.Fragment>
         <button className="btn btn-danger" onClick={onCancel}><Icon name="close" size={15} />Stornieren</button>
         <div style={{ flex: 1 }} />
