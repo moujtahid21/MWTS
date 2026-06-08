@@ -126,6 +126,17 @@ function Dienstplan({ onNav }) {
     setModal({ staffId: s.id, date, entry: e?.state === "shift" ? e : null });
   };
 
+  // Monatsansicht: Klick auf eine Tages-Kachel öffnet dasselbe AddShiftModal,
+  // vorbelegt mit dem Datum und dem ersten Mitarbeiter (im Dropdown wählbar).
+  const monthDayClick = (date) => {
+    const ls = lockState(date);
+    if (ls.locked) { toast("Gesperrt: liegt innerhalb von 48 Stunden", "lock"); return; }
+    const first = staff[0]; if (!first) return;
+    const e = shifts[first.id]?.[date];
+    if (ls.past) { setModal({ staffId: first.id, date, entry: e, readOnly: true }); return; }
+    setModal({ staffId: first.id, date, entry: e?.state === "shift" ? e : null });
+  };
+
   return (
     <React.Fragment>
       {/* Controls */}
@@ -186,7 +197,7 @@ function Dienstplan({ onNav }) {
             </table>
           </div>
         </div>
-      ) : <MonthGrid shifts={shifts} staff={staff} />}
+      ) : <MonthGrid shifts={shifts} staff={staff} onDayClick={monthDayClick} />}
 
       {modal && <AddShiftModal D={D} init={modal} onClose={() => setModal(null)} onSave={saveShift} />}
     </React.Fragment>
@@ -194,8 +205,9 @@ function Dienstplan({ onNav }) {
 }
 
 /* ---- Month grid ---- */
-function MonthGrid({ shifts, staff }) {
+function MonthGrid({ shifts, staff, onDayClick }) {
   const D = MWDATA;
+  const [hover, setHover] = useState(null);
   // June 2026
   const first = new Date(Date.UTC(2026, 5, 1));
   const startPad = (first.getUTCDay() + 6) % 7; // Mon=0
@@ -214,13 +226,14 @@ function MonthGrid({ shifts, staff }) {
           staff.forEach(s => { const e = shifts[s.id]?.[iso]; if (e?.state === "shift") cnt++; if (e?.state === "urlaub" || e?.state === "krank") vac++; });
           const cov = Math.min(1, cnt / Math.max(1, staff.length));
           return (
-            <div key={i} style={{ borderRadius: 10, border: "1px solid var(--border)", background: ls.locked ? "color-mix(in srgb, var(--warn) 6%, var(--surface))" : "var(--surface)", padding: 9, minHeight: 92, position: "relative", opacity: ls.past ? .7 : 1 }}>
+            <div key={i} onClick={() => onDayClick(iso)} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(h => h === i ? null : h)} title={ls.locked ? "Gesperrt (< 48h)" : "Schicht hinzuf\u00fcgen"} style={{ borderRadius: 10, border: "1px solid " + (hover === i && !ls.locked ? "var(--color-primary)" : "var(--border)"), background: ls.locked ? "color-mix(in srgb, var(--warn) 6%, var(--surface))" : "var(--surface)", padding: 9, minHeight: 92, position: "relative", opacity: ls.past ? .7 : 1, cursor: ls.locked ? "not-allowed" : "pointer", boxShadow: hover === i && !ls.locked ? "var(--shadow)" : "none", transition: "border-color .12s, box-shadow .12s" }}>
               <div className="flex items-center between"><span className="t-mono t-strong" style={{ fontSize: 13 }}>{dayNum(iso)}</span>{ls.locked && <Icon name="lock" size={12} style={{ color: "var(--warn-fg)" }} />}{ls.past && !ls.locked && <Icon name="check" size={12} style={{ color: "var(--ok-fg)" }} />}</div>
               <div style={{ marginTop: 8 }}>
                 <div className="flex items-center gap-sm" style={{ fontSize: 11, color: "var(--fg-2)" }}><span style={{ width: 8, height: 8, borderRadius: 99, background: "var(--color-primary)" }} />{cnt} Schichten</div>
                 {vac > 0 && <div className="flex items-center gap-sm" style={{ fontSize: 11, color: "var(--info-fg)", marginTop: 3 }}><Icon name="plane" size={11} />{vac} abwesend</div>}
               </div>
               <div className="progress" style={{ position: "absolute", left: 9, right: 9, bottom: 8, height: 4 }}><div style={{ width: (cov * 100) + "%" }} /></div>
+              {hover === i && !ls.locked && !ls.past && <div style={{ position: "absolute", top: 7, right: 7, width: 18, height: 18, borderRadius: 6, background: "var(--color-primary)", color: "#fff", display: "grid", placeItems: "center" }}><Icon name="plus" size={12} /></div>}
             </div>
           );
         })}

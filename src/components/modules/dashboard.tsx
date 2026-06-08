@@ -25,6 +25,26 @@ function StatTile({ label, value, icon, delta, deltaDir, sub }) {
   );
 }
 
+/* Live-Uhr + Datum — eigenständige Komponente, damit nur diese (nicht das ganze
+   Dashboard) im Sekundentakt neu rendert. tabular-nums verhindert Breiten-Flackern. */
+function LiveClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const date = now.toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+  const time = now.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return (
+    <div className="flex items-center gap-sm" style={{ height: 36, padding: "0 12px", border: "1px solid var(--border)", borderRadius: "var(--r)", background: "var(--surface)" }} title="Aktuelles Datum & Uhrzeit">
+      <Icon name="clock" size={14} style={{ color: "var(--fg-3)", flex: "0 0 auto" }} />
+      <span className="t-mut" style={{ fontSize: 12.5, whiteSpace: "nowrap" }}>{date}</span>
+      <span style={{ width: 1, height: 16, background: "var(--border)", flex: "0 0 auto" }} />
+      <span className="t-mono t-strong" style={{ fontSize: 13, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{time} Uhr</span>
+    </div>
+  );
+}
+
 export function Dashboard() {
   const onNav = useAppNav();
   const kpi = MWDATA.kpi;
@@ -39,7 +59,8 @@ export function Dashboard() {
 
   return (
     <div className="view-narrow">
-      <PageHead title="Übersicht" sub={"Disposition · " + new Date().toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}>
+      <PageHead title="Übersicht" sub="Disposition · Operativer Lagebericht">
+        <LiveClock />
         <div className="seg">
           <button className={variant === "ops" ? "on" : ""} onClick={() => setVariant("ops")}><Icon name="trend" size={14} />Operativ</button>
           <button className={variant === "cockpit" ? "on" : ""} onClick={() => setVariant("cockpit")}><Icon name="grid" size={14} />Cockpit</button>

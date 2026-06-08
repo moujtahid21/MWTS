@@ -18,22 +18,38 @@ export function CalendarView() {
   const D = MWDATA;
   const toast = useToast();
   const drivers = D.drivers.filter(d => d.active).slice(0, 12);
+
+  // Woche relativ zu heute verschieben (analog Dienstplan)
+  const [weekOffset, setWeekOffset] = useState(0);
+  // Grid-State als Key-Value-Map: `${driverId}|${iso}` -> "free" | "booked" | "off".
+  // Es werden nur tatsächliche Änderungen gespeichert -> bleiben beim Blättern erhalten.
+  const [grid, setGrid] = useState({});
+
   const days = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
-  const dates = [2, 3, 4, 5, 6, 7, 8];
-  // build availability grid deterministically
-  const [grid, setGrid] = useState(() => drivers.map((d, i) => dates.map((_, j) => {
-    const v = (i * 7 + j * 3 + d.name.length) % 10;
-    return v < 5 ? "free" : v < 8 ? "booked" : "off";
-  })));
+  const iso = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  const isoWeek = (d) => { const t = new Date(d.getFullYear(), d.getMonth(), d.getDate()); const day = (t.getDay() + 6) % 7; t.setDate(t.getDate() - day + 3); const first = new Date(t.getFullYear(), 0, 4); return 1 + Math.round(((t - first) / 86400000 - 3 + ((first.getDay() + 6) % 7)) / 7); };
+  const fmtShort = (d) => String(d.getDate()).padStart(2, "0") + "." + String(d.getMonth() + 1).padStart(2, "0") + ".";
+
+  // 7 Tage der angezeigten Woche (Mo-So) aus heute + weekOffset
+  const weekDates = useMemo(() => {
+    const base = new Date(); base.setHours(0, 0, 0, 0);
+    const monday = new Date(base);
+    monday.setDate(base.getDate() - ((base.getDay() + 6) % 7) + weekOffset * 7);
+    return Array.from({ length: 7 }, (_, i) => { const dd = new Date(monday); dd.setDate(monday.getDate() + i); return dd; });
+  }, [weekOffset]);
+  const todayIso = iso(new Date());
+
+  const cellState = (driverId, d) => grid[driverId + "|" + iso(d)] || "free";
   const cycle = { free: "booked", booked: "off", off: "free" };
   const colors = { free: ["var(--ok-bg)", "var(--ok-fg)", "verfügbar"], booked: ["var(--info-bg)", "var(--info-fg)", "verplant"], off: ["var(--surface-3)", "var(--fg-faint)", "abwesend"] };
-  const click = (i, j) => setGrid(g => g.map((row, ri) => ri === i ? row.map((c, ci) => ci === j ? cycle[c] : c) : row));
+  const click = (driverId, d) => setGrid(g => { const k = driverId + "|" + iso(d); return { ...g, [k]: cycle[g[k] || "free"] }; });
 
   return (
     <div className="view-narrow">
-      <PageHead title="Verfügbarkeits-Kalender" sub="KW 23 · 02.–08. Juni 2026 · klicken zum Umschalten">
-        <button className="btn"><Icon name="chevLeft" size={15} />Vorwoche</button>
-        <button className="btn">Nächste Woche<Icon name="chevRight" size={15} /></button>
+      <PageHead title="Verfügbarkeits-Kalender" sub={"KW " + isoWeek(weekDates[0]) + " \u00b7 " + fmtShort(weekDates[0]) + "\u2013" + fmtShort(weekDates[6]) + " \u00b7 klicken zum Umschalten"}>
+        <button className="btn" onClick={() => setWeekOffset(w => w - 1)}><Icon name="chevLeft" size={15} />Vorwoche</button>
+        {weekOffset !== 0 && <button className="btn" onClick={() => setWeekOffset(0)}>Heute</button>}
+        <button className="btn" onClick={() => setWeekOffset(w => w + 1)}>Nächste Woche<Icon name="chevRight" size={15} /></button>
         <Link href="/shiftplanner" className="btn btn-primary"><Icon name="plus" size={16} />Schicht planen</Link>
       </PageHead>
 
@@ -44,20 +60,21 @@ export function CalendarView() {
       <div className="card" style={{ overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
           <table className="tbl" style={{ minWidth: 720 }}>
-            <thead><tr><th style={{ minWidth: 200 }}>Fahrer</th>{days.map((d, i) => <th key={d} style={{ textAlign: "center" }}>{d}<div className="t-mut" style={{ fontWeight: 400, fontSize: 11 }}>{dates[i].toString().padStart(2, "0")}.06</div></th>)}<th style={{ textAlign: "center" }}>Quote</th></tr></thead>
+            <thead><tr><th style={{ minWidth: 200 }}>Fahrer</th>{weekDates.map((d, i) => { const isToday = iso(d) === todayIso; return <th key={iso(d)} style={{ textAlign: "center", background: isToday ? "var(--color-primary-soft)" : undefined }}>{days[i]}<div className="t-mut" style={{ fontWeight: isToday ? 700 : 400, fontSize: 11, color: isToday ? "var(--color-primary-strong)" : undefined }}>{fmtShort(d)}</div></th>; })}<th style={{ textAlign: "center" }}>Quote</th></tr></thead>
             <tbody>
-              {drivers.map((d, i) => {
-                const free = grid[i].filter(c => c === "free").length;
+              {drivers.map((d) => {
+                const states = weekDates.map(day => cellState(d.id, day));
+                const free = states.filter(c => c === "free").length;
                 return (
                   <tr key={d.id}>
                     <td><div className="flex items-center gap-sm" style={{ cursor: "pointer" }} onClick={() => onNav("drivers", { focus: d.id })}><Avatar name={d.name} size={28} /><div><div className="t-strong" style={{ fontSize: 12.5 }}>{d.name}</div><div className="t-mut" style={{ fontSize: 11 }}>{d.type}</div></div></div></td>
-                    {grid[i].map((c, j) => (
-                      <td key={j} style={{ textAlign: "center", padding: 5 }}>
-                        <button onClick={() => click(i, j)} title={colors[c][2]} style={{ width: "100%", height: 34, border: "1px solid var(--border)", borderRadius: 7, background: colors[c][0], color: colors[c][1], cursor: "pointer", display: "grid", placeItems: "center" }}>
+                    {weekDates.map((day, j) => { const c = states[j]; return (
+                      <td key={iso(day)} style={{ textAlign: "center", padding: 5 }}>
+                        <button onClick={() => click(d.id, day)} title={colors[c][2]} style={{ width: "100%", height: 34, border: "1px solid var(--border)", borderRadius: 7, background: colors[c][0], color: colors[c][1], cursor: "pointer", display: "grid", placeItems: "center" }}>
                           {c === "free" ? <Icon name="check" size={14} sw={3} /> : c === "booked" ? <Icon name="truck" size={14} /> : <Icon name="close" size={13} />}
                         </button>
                       </td>
-                    ))}
+                    ); })}
                     <td style={{ textAlign: "center" }}><span className="t-mono t-strong">{free}/7</span></td>
                   </tr>
                 );
