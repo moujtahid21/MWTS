@@ -1,8 +1,9 @@
 /* ============================================================
-   MW Transport Service — Next.js middleware
+   MW Transport Service — Next.js middleware  (UNVERÄNDERT)
    ------------------------------------------------------------
-   Runs on every matched request to keep the Supabase session fresh
-   and enforce authentication (see lib/supabase/middleware.ts).
+   Bleibt ein schlanker Delegator. Die eigentliche Auth- + RBAC-Logik
+   (inkl. Role-Check) lebt in lib/supabase/middleware.ts, damit sie den
+   einen, bereits vorhandenen getUser()-Call wiederverwendet.
    ============================================================ */
 import { type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
@@ -17,7 +18,7 @@ export const config = {
      * Match all request paths except:
      *  - _next/static, _next/image (build assets)
      *  - favicon and common static image/font files
-     * The auth check itself decides which of the remaining routes are public.
+     * The auth/role check itself decides which of the remaining routes are public.
      */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?)$).*)",
   ],
