@@ -17,6 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
+import {signOut} from "@/actions/auth-actions";
 
 type Session = { dev: string; loc: string; ip: string; when: string; current?: boolean };
 type Activity = { icon: LucideIcon; txt: string; when: string };
@@ -63,10 +64,12 @@ export default function ProfilePage() {
           <Settings size={15} />
           Einstellungen
         </Link>
-        <button className="btn btn-danger">
-          <LogOut size={15} />
-          Ausloggen
-        </button>
+        <form action={signOut}>
+          <button type="submit" className="btn btn-danger">
+            <LogOut size={15} />
+            Ausloggen
+          </button>
+        </form>
       </PageHeader>
 
       {/* Identity banner */}

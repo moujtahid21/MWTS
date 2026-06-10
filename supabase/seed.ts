@@ -56,6 +56,9 @@ const TENANT_NAME = process.env.SEED_TENANT_NAME ?? "MW Transport Service";
 const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? "dispo@mwtransport.de";
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? "mwtransport2026";
 
+const DRIVER_EMAIL = process.env.SEED_DRIVER_EMAIL ?? "amin@mwtransport.de";
+const DRIVER_PASSWORD = process.env.SEED_DRIVER_PASSWORD ?? "fahrer2026";
+
 const admin = createClient<Database>(SUPABASE_URL, SERVICE_ROLE, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
@@ -102,11 +105,50 @@ async function getOrCreateAdminUser(tenantId: string): Promise<string> {
   return data.user.id;
 }
 
-async function ensureMembership(userId: string, tenantId: string) {
+async function getOrCreateDriverUser(tenantId: string): Promise<string> {
+  const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+  const found = list?.users.find((u) => u.email?.toLowerCase() === DRIVER_EMAIL.toLowerCase());
+
+  if (found) {
+    await admin.auth.admin.updateUserById(found.id, {
+      app_metadata: { tenant_id: tenantId, role: "driver", driver_display_id: "F-2001" },
+    });
+    return found.id;
+  }
+
+  const { data, error } = await admin.auth.admin.createUser({
+    email: DRIVER_EMAIL,
+    password: DRIVER_PASSWORD,
+    email_confirm: true,
+    // Die Rolle 'driver' ins JWT schreiben, damit RLS und Middleware das erkennen
+    app_metadata: { tenant_id: tenantId, role: "driver", driver_display_id: "F-2001" },
+    user_metadata: { name: "Amin Dahmouni" },
+  });
+  if (error) throw error;
+  return data.user.id;
+}
+
+async function ensureMembership(userId: string, tenantId: string, role: string = "dispatcher") {
   const { error } = await admin
     .from("memberships")
-    .upsert({ user_id: userId, tenant_id: tenantId, role: "dispatcher" });
+    .upsert({ user_id: userId, tenant_id: tenantId, role });
   if (error) throw error;
+}
+
+async function ensureDriverProfile(userId: string, tenantId: string) {
+  const { error } = await admin.from("drivers").upsert({
+    tenant_id: tenantId,
+    user_id: userId,
+    display_id: "F-2001",
+    name: "Amin Dahmouni",
+    phone: "+49 151 98765432", // Beispiel
+    city: "Düsseldorf",
+    job_type: "Angestellt"
+  }, { onConflict: "tenant_id, display_id" });
+
+  if (error) {
+     console.warn("  [Warnung] Konnte Driver-Profil nicht anlegen. Existiert die 'drivers' Tabelle?");
+  }
 }
 
 /* ---------- main ---------- */
@@ -119,6 +161,12 @@ async function main() {
   const userId = await getOrCreateAdminUser(tenantId);
   await ensureMembership(userId, tenantId);
   console.log("  user_id   =", userId);
+
+  console.log("→ Demo-Fahrer wird provisioniert …");
+  const driverId = await getOrCreateDriverUser(tenantId);
+  await ensureMembership(driverId, tenantId, "driver");
+  await ensureDriverProfile(driverId, tenantId);
+  console.log("  driver_id =", driverId);
 
   // Idempotent re-seed: clear this tenant's business rows first.
   console.log("→ Vorhandene Tenant-Daten werden bereinigt …");
@@ -202,7 +250,11 @@ async function main() {
   console.log("  Login-Daten (Demo-Disponent):");
   console.log("    E-Mail:   " + ADMIN_EMAIL);
   console.log("    Passwort: " + ADMIN_PASSWORD);
+  console.log("\n  Login-Daten (Demo-Fahrer):");
+  console.log("    E-Mail:   " + DRIVER_EMAIL);
+  console.log("    Passwort: " + DRIVER_PASSWORD);
   console.log("\n  Jetzt `npm run dev` starten und unter /login anmelden.\n");
+
 }
 
 main().catch((err) => {
