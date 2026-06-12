@@ -1,14 +1,14 @@
 /* ============================================================
-   MW Transport Service — Next.js proxy  (UNVERÄNDERT)
+   MW Transport Service — Next.js middleware  (UNVERÄNDERT)
    ------------------------------------------------------------
    Bleibt ein schlanker Delegator. Die eigentliche Auth- + RBAC-Logik
-   (inkl. Role-Check) lebt in lib/supabase/proxy.ts, damit sie den
+   (inkl. Role-Check) lebt in lib/supabase/middleware.ts, damit sie den
    einen, bereits vorhandenen getUser()-Call wiederverwendet.
    ============================================================ */
 import { type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   return await updateSession(request);
 }
 
