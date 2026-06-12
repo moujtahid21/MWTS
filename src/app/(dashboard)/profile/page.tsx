@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import {signOut} from "@/actions/auth-actions";
+import { InviteTokenRow } from "@/components/profile/invite-token-row";
 
 type Session = { dev: string; loc: string; ip: string; when: string; current?: boolean };
 type Activity = { icon: LucideIcon; txt: string; when: string };
@@ -148,16 +149,7 @@ export default function ProfilePage() {
               </div>
               <button className="btn btn-sm">Ändern</button>
             </div>
-            <div className="flex between items-center" style={{ padding: "11px 13px", border: "1px solid var(--border)", borderRadius: "var(--r)" }}>
-              <div>
-                <div className="t-strong" style={{ fontSize: 13 }}>Framer-Einladungstoken</div>
-                <div className="t-mut" style={{ fontSize: 11.5 }}>Einmal-Token für neue Mitglieder</div>
-              </div>
-              <button className="btn btn-sm">
-                <Plus size={13} />
-                Erzeugen
-              </button>
-            </div>
+            <InviteTokenRow />
           </div>
         </div>
 
