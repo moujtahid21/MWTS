@@ -8,7 +8,7 @@
    reicht ein schlankes `driver`-Profil an die Client-Shell weiter
    (Sidebar/Topbar/Bottom-Nav brauchen usePathname + Link → Client).
 
-   Der RBAC-Gate in lib/supabase/middleware.ts stellt bereits sicher,
+   Der RBAC-Gate in lib/supabase/proxy.ts stellt bereits sicher,
    dass NUR Fahrer (role === "driver") hier landen — dieses Layout muss
    die Rolle also nicht erneut prüfen.
 

@@ -1,5 +1,5 @@
 /* ============================================================
-   MW Transport Service — Supabase session middleware helper
+   MW Transport Service — Supabase session proxy helper
    ------------------------------------------------------------
    Refreshes the auth token on every request (so Server Components
    always see a valid session), gates the app behind login AND enforces
