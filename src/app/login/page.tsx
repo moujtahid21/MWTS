@@ -1,5 +1,5 @@
 /* MW Transport Service — Login page. Sits OUTSIDE the (dashboard) group,
-   so no Sidebar/Topbar. The middleware redirects authenticated users away. */
+   so no Sidebar/Topbar. The proxy redirects authenticated users away. */
 import type { Metadata } from "next";
 import { LoginForm } from "./login-form";
 

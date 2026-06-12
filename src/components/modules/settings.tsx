@@ -11,6 +11,7 @@ import {
 import { MWDATA } from "@/lib/data";
 import { useAppNav } from "@/lib/use-app-nav";
 import { useTenantStore, BRAND_PRESETS } from "@/lib/store/use-tenant-store";
+import {UsersSettings} from "@/components/settings/user-settings";
 
 export function Settings() {
   const toast = useToast();

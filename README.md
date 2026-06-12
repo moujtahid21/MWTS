@@ -118,7 +118,7 @@ per module as a follow-up.
 
 ## Next steps (stubbed)
 
-- `middleware.ts` — Supabase Auth + TOTP 2FA gate in front of `(dashboard)`.
+- `proxy.ts` — Supabase Auth + TOTP 2FA gate in front of `(dashboard)`.
 - `lib/supabase/{client,server}.ts` — typed clients; all queries scoped by `tenant_id` via RLS.
 - Server Actions + Zod schemas for the CRUD forms.
 - `getNavBadges()` in `(dashboard)/layout.tsx` → real tenant-scoped count.

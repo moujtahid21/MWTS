@@ -30,7 +30,7 @@ export async function createClient() {
             );
           } catch {
             // `setAll` was called from a Server Component where cookies are
-            // read-only. The session is refreshed in middleware instead, so
+            // read-only. The session is refreshed in proxy instead, so
             // this can be safely ignored.
           }
         },
