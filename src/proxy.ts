@@ -1,14 +1,19 @@
 /* ============================================================
-   MW Transport Service — Next.js middleware  (UNVERÄNDERT)
+   MW Transport Service — Next.js Proxy (vormals middleware)
+   src/proxy.ts
    ------------------------------------------------------------
-   Bleibt ein schlanker Delegator. Die eigentliche Auth- + RBAC-Logik
-   (inkl. Role-Check) lebt in lib/supabase/middleware.ts, damit sie den
-   einen, bereits vorhandenen getUser()-Call wiederverwendet.
+   Next.js 16 hat die `middleware`-Konvention in `proxy` umbenannt:
+   die Datei heißt jetzt proxy.ts und MUSS eine Funktion `proxy`
+   (oder einen Default-Export) bereitstellen.
+
+   Bleibt ein schlanker Delegator — die eigentliche Auth- + RBAC-Logik
+   (inkl. Role-Check) lebt in lib/supabase/middleware.ts und nutzt den
+   einen, bereits vorhandenen getUser()-Call wieder.
    ============================================================ */
 import { type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   return await updateSession(request);
 }
 
