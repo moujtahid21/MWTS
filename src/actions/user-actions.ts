@@ -94,7 +94,7 @@ export async function inviteUser(
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
   const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, {
     redirectTo: `${siteUrl}/auth/confirm?next=/auth/set-password`,
-    data: { full_name: name, role, tenant_id: tenantId, phone },
+    data: { full_name: name, phone },
   });
 
   if (inviteErr || !invited?.user) {
@@ -106,6 +106,12 @@ export async function inviteUser(
   }
 
   const userId = invited.user.id;
+
+  // role + tenant_id in app_metadata schreiben — daraus liest das Routing
+  // (proxy.ts) die Rolle. inviteUserByEmail kann das nicht direkt, daher hier.
+  await admin.auth.admin.updateUserById(userId, {
+    app_metadata: { role, tenant_id: tenantId },
+  });
 
   // 2) Mitgliedschaft im Tenant anlegen (idempotent via upsert).
   const { error: memErr } = await admin

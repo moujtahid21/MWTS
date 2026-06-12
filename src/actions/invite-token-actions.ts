@@ -149,11 +149,14 @@ export async function redeemInviteToken(_prev: RedeemState, formData: FormData):
     return { ok: false, error: "Dieser Einladungslink ist abgelaufen." };
 
   // 2) Konto direkt anlegen (E-Mail als bestätigt markiert → sofort login-fähig).
+  //    role + tenant_id MÜSSEN in app_metadata stehen — daraus liest das Routing
+  //    (proxy.ts) die Rolle. user_metadata wäre für die UI, aber nicht fürs Gate.
   const { data: created, error: cErr } = await admin.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
-    user_metadata: { full_name: name, role: row.role, tenant_id: row.tenant_id },
+    app_metadata: { role: row.role, tenant_id: row.tenant_id },
+    user_metadata: { full_name: name },
   });
   if (cErr || !created?.user) {
     const msg = cErr?.message?.includes("already")
