@@ -1,5 +1,5 @@
 /* ============================================================
-   MW Transport Service — Supabase session proxy helper
+   MW Transport Service — Supabase session middleware helper
    ------------------------------------------------------------
    Refreshes the auth token on every request (so Server Components
    always see a valid session), gates the app behind login AND enforces
@@ -24,7 +24,7 @@ import {
 } from "@/lib/roles";
 
 /** Public routes that must stay reachable without a session. */
-const PUBLIC_PREFIXES = ["/login", "/auth"];
+const PUBLIC_PREFIXES = ["/login", "/auth", "/join"];
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
