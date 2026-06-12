@@ -9,7 +9,7 @@
    date-utils. State als Map (date → DriverAvailability), bleibt beim
    Blättern erhalten. Phase 3: upsert nach driver_availabilities.
    ============================================================ */
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { Check, Minus, Truck, Lock, ChevronLeft, ChevronRight, List, Grid3x3, Calendar, AlertTriangle } from "lucide-react";
 import { Modal, Field, Switch, PageHead, useToast } from "@/components/ui";
 import {
@@ -17,7 +17,8 @@ import {
   isoWeek, fmtDate, fmtShort, checkAvailabilityLock, LOCK_REASON_DE,
 } from "@/lib/driver/date-utils";
 import { useLongPress } from "@/lib/driver/use-long-press";
-import { SHIFT_TPL, seedAvailabilities, ME } from "@/lib/driver/mock-data";
+import { SHIFT_TPL, ME } from "@/lib/driver/mock-data";
+import { saveAvailability } from "@/lib/driver/availability-data";
 import type { DriverAvailability, AvailabilityStatus } from "@/lib/driver/types";
 
 type ViewMode = "woche" | "monat";
@@ -245,14 +246,21 @@ function MonthGrid({
 }
 
 /* ---------- Hauptansicht ---------- */
-export function AvailabilityView() {
+export function AvailabilityView({
+  initialAvail,
+  isMock = false,
+}: {
+  initialAvail: Record<string, DriverAvailability>;
+  isMock?: boolean;
+}) {
   const now = useMemo(() => new Date(), []);
   const toast = useToast();
-  const [avail, setAvail] = useState<Record<string, DriverAvailability>>(() => seedAvailabilities(now));
+  const [avail, setAvail] = useState<Record<string, DriverAvailability>>(initialAvail);
   const [viewMode, setViewMode] = useState<ViewMode>("woche");
   const [weekOffset, setWeekOffset] = useState(0);
   const [monthCursor, setMonthCursor] = useState(() => new Date(now.getFullYear(), now.getMonth(), 1));
   const [picker, setPicker] = useState<string | null>(null);
+  const [, startSave] = useTransition();
 
   const weekStart = addDays(mondayOf(now), weekOffset * 7);
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -261,9 +269,54 @@ export function AvailabilityView() {
   const setAvailFor = (iso: string, data: Partial<DriverAvailability>) =>
     setAvail((m) => ({ ...m, [iso]: { ...emptyAvail(iso), ...m[iso], ...data, date: iso } }));
 
-  const setFullDay = (iso: string) => { setAvailFor(iso, { status: "anwesend", start_time: "00:00", end_time: "24:00", is_full_day: true }); toast("Ganztägig verfügbar eingetragen", "check"); };
-  const saveTimes = (iso: string, data: Partial<DriverAvailability>) => { setAvailFor(iso, data); setPicker(null); toast("Verfügbarkeit gespeichert", "check"); };
-  const clear = (iso: string) => { setAvailFor(iso, { status: "abwesend", start_time: null, end_time: null, is_full_day: false }); setPicker(null); toast("Als abwesend markiert", "check"); };
+  /**
+   * Optimistisches Update + Persistenz. Im Mock-Modus (Tabelle fehlt) bleibt
+   * es rein lokal. Sonst: Server Action; bei Fehler Rollback auf den Vorzustand.
+   */
+  const persist = (
+    iso: string,
+    next: Partial<DriverAvailability>,
+    okMsg: string,
+  ) => {
+    const prev = avail[iso];
+    setAvailFor(iso, next);
+    if (isMock) {
+      toast(okMsg, "check");
+      return;
+    }
+    startSave(async () => {
+      try {
+        await saveAvailability({
+          date: iso,
+          status: next.status as AvailabilityStatus,
+          start_time: next.start_time ?? null,
+          end_time: next.end_time ?? null,
+          is_full_day: next.is_full_day ?? false,
+        });
+        toast(okMsg, "check");
+      } catch {
+        // Rollback
+        setAvail((m) => {
+          const copy = { ...m };
+          if (prev) copy[iso] = prev;
+          else delete copy[iso];
+          return copy;
+        });
+        toast("Speichern fehlgeschlagen — erneut versuchen", "alert");
+      }
+    });
+  };
+
+  const setFullDay = (iso: string) =>
+    persist(iso, { status: "anwesend", start_time: "00:00", end_time: "24:00", is_full_day: true }, "Ganztägig verfügbar eingetragen");
+  const saveTimes = (iso: string, data: Partial<DriverAvailability>) => {
+    persist(iso, data, "Verfügbarkeit gespeichert");
+    setPicker(null);
+  };
+  const clear = (iso: string) => {
+    persist(iso, { status: "abwesend", start_time: null, end_time: null, is_full_day: false }, "Als abwesend markiert");
+    setPicker(null);
+  };
 
   const availCount = weekDays.filter((d) => getA(isoOf(d)).status === "anwesend").length;
   const editableCount = weekDays.filter((d) => !checkAvailabilityLock(isoOf(d), now).isLocked && getA(isoOf(d)).status !== "verplant").length;

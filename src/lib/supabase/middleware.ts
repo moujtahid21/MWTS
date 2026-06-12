@@ -14,6 +14,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "./types";
+import { roleFromClaims } from "@/lib/auth/roles-server";
 import {
   DRIVER_HOME,
   STAFF_HOME,
@@ -75,9 +76,12 @@ export async function updateSession(request: NextRequest) {
     return res;
   }
 
-  // 2) Authenticated → resolve role once and enforce RBAC.
+  // 2) Authenticated → Rolle aus den JWT-Claims (Custom Access Token Hook).
+  //    Kein DB-Fallback hier: die Middleware läuft pro Request und muss schnell
+  //    bleiben. Solange der Hook gesetzt ist, steht role im app_metadata-Claim.
+  //    Default 'dispatcher' → ein fehlender Claim gibt NIE das Fahrer-Portal frei.
   if (user) {
-    const role = await resolveRole(supabase, user);
+    const role = roleFromClaims(user) ?? "dispatcher";
     const wantsDriverArea = isDriverPath(pathname);
 
     // Already authenticated and visiting /login or root → role home.
@@ -100,30 +104,4 @@ export async function updateSession(request: NextRequest) {
 
   // Must return the (possibly cookie-mutated) response untouched.
   return supabaseResponse;
-}
-
-/**
- * Resolve the caller's role.
- *  1. JWT `app_metadata.role` — set on invite / via a custom access-token hook,
- *     no extra query (mirrors getActiveTenantId in lib/supabase/tenant.ts).
- *  2. Fallback: single `memberships` lookup. Runs only when the claim is absent.
- *
- * To keep middleware on the fast path, stamp `role` into app_metadata so the
- * fallback query is never hit in steady state.
- */
-async function resolveRole(
-  supabase: ReturnType<typeof createServerClient<Database>>,
-  user: { id: string; app_metadata?: Record<string, unknown> },
-): Promise<string> {
-  const metaRole = user.app_metadata?.role;
-  if (typeof metaRole === "string" && metaRole.length > 0) return metaRole;
-
-  const { data } = await supabase
-    .from("memberships")
-    .select("role")
-    .eq("user_id", user.id)
-    .limit(1)
-    .maybeSingle();
-
-  return data?.role ?? "dispatcher";
 }

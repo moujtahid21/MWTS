@@ -16,11 +16,11 @@
    ============================================================ */
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { Truck, Menu, X, LogOut } from "lucide-react";
 import { DRIVER_NAV, driverTitleForPath } from "@/lib/driver-nav";
 import { Avatar } from "@/components/ui";
-import { createClient } from "@/lib/supabase/client";
+import { signOut } from "@/actions/auth-actions";
 
 export type DriverProfile = {
   name: string;
@@ -36,17 +36,9 @@ export function DriverShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
-
-  async function signOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.replace("/login");
-    router.refresh();
-  }
 
   return (
     <div className="flex min-h-[100dvh] bg-[var(--bg)] text-[var(--fg)]">
@@ -103,7 +95,7 @@ export function DriverShell({
               <div className="text-[11px] text-[var(--sidebar-fg-dim)]">{driver.roleLabel}</div>
             </div>
             <button
-              onClick={signOut}
+              onClick={() => signOut()}
               title="Abmelden"
               aria-label="Abmelden"
               className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-[var(--sidebar-fg-dim)] hover:bg-[var(--sidebar-active)] hover:text-white"
@@ -232,7 +224,7 @@ export function DriverShell({
                   </div>
                 </div>
                 <button
-                  onClick={signOut}
+                  onClick={() => signOut()}
                   aria-label="Abmelden"
                   className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-[var(--sidebar-fg-dim)] hover:bg-[var(--sidebar-active)] hover:text-white"
                 >
