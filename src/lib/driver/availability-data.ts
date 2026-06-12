@@ -20,6 +20,19 @@ import { seedAvailabilities } from "@/lib/driver/mock-data";
 
 const TABLE = "driver_availabilities";
 
+/**
+ * Erkennt „Tabelle existiert nicht" über beide Wege:
+ *  • PGRST205 — PostgREST findet die Tabelle nicht im Schema-Cache (supabase-js)
+ *  • 42P01    — Postgres undefined_table (direktes SQL)
+ * sowie als letzte Absicherung die Fehlermeldung selbst.
+ */
+function isMissingTableError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === "PGRST205" || error.code === "42P01") return true;
+  const msg = (error.message ?? "").toLowerCase();
+  return msg.includes("schema cache") || msg.includes("could not find the table");
+}
+
 interface AvailRow {
   date: string;
   status: AvailabilityStatus;
@@ -72,8 +85,10 @@ export async function loadMyAvailabilities(
     .order("date", { ascending: true });
 
   // Tabelle noch nicht migriert → Mock, damit die Demo lebt.
+  // supabase-js geht über PostgREST: fehlende Tabelle = PGRST205
+  // (der reine Postgres-Code 42P01 kommt nur bei direktem SQL).
   if (error) {
-    if (error.code === "42P01") {
+    if (isMissingTableError(error)) {
       return { map: seedAvailabilities(new Date()), isMock: true };
     }
     throw error;

@@ -20,6 +20,7 @@ import { usePathname } from "next/navigation";
 import { Truck, Menu, X, LogOut } from "lucide-react";
 import { DRIVER_NAV, driverTitleForPath } from "@/lib/driver-nav";
 import { Avatar } from "@/components/ui";
+import { AvatarMenu } from "@/components/layout/avatar-menu";
 import { signOut } from "@/actions/auth-actions";
 
 export type DriverProfile = {
@@ -125,7 +126,7 @@ export function DriverShell({
               {driverTitleForPath(pathname)}
             </span>
           </div>
-          <Avatar name={driver.name} size={30} />
+          <AvatarMenu name={driver.name} email={driver.email} size={30} align="right" />
         </header>
 
         <main className="flex-1 px-4 pb-[calc(72px+env(safe-area-inset-bottom))] pt-4 md:px-8 md:pb-8">
