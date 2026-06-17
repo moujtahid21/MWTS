@@ -3,33 +3,20 @@
    src/app/(driver)/layout.tsx
    ------------------------------------------------------------
    Gemeinsame Shell für alle Fahrer-Routen unter /fahrer/*.
-
-   Server Component: löst den angemeldeten User serverseitig auf und
-   reicht ein schlankes `driver`-Profil an die Client-Shell weiter
-   (Sidebar/Topbar/Bottom-Nav brauchen usePathname + Link → Client).
-
-   Der RBAC-Gate in lib/supabase/middleware.ts stellt bereits sicher,
-   dass NUR Fahrer (role === "driver") hier landen — dieses Layout muss
-   die Rolle also nicht erneut prüfen.
-
-   Phase 3: Profilfelder (Name, Team, Vertragsstunden) aus der
-   `drivers`-/Profil-Tabelle joinen; aktuell aus user_metadata gemockt.
+   Server Component: löst den angemeldeten Fahrer aus `drivers`
+   (per user_id) auf und reicht Name/E-Mail an die Client-Shell.
+   Der RBAC-Gate (proxy.ts) stellt sicher, dass nur Fahrer hier landen.
    ============================================================ */
 import { ToastProvider } from "@/components/ui";
-import { createClient } from "@/lib/supabase/server";
+import { getDriverContext } from "@/lib/driver/driver-data";
 import { DriverShell, type DriverProfile } from "@/components/layout/driver-shell";
 
 export default async function DriverLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const ctx = await getDriverContext();
 
-  // TODO Phase 3: select name/team/role from drivers/profile (tenant-scoped via RLS).
-  const meta = (user?.user_metadata ?? {}) as Record<string, string>;
   const driver: DriverProfile = {
-    name: meta.full_name ?? meta.name ?? "Fahrer",
-    email: user?.email ?? "",
+    name: ctx?.driver?.name ?? ctx?.email?.split("@")[0] ?? "Fahrer",
+    email: ctx?.email ?? "",
     roleLabel: "Fahrer",
   };
 

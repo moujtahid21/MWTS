@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { Plate, Modal, Field, PageHead, Empty, useToast } from "@/components/ui";
 import { fmtDate, isoOf } from "@/lib/driver/date-utils";
-import { DOC_TYPES, ME } from "@/lib/driver/mock-data";
+import { DOC_TYPES } from "@/lib/driver/mock-data";
 import type { DriverOrder, OrderStatus, OrderDocument, DocType } from "@/lib/driver/types";
 
 const STEPS = ["Angenommen", "Abgeholt", "Unterwegs", "Geliefert"];
@@ -111,7 +111,7 @@ function AddDocModal({
     const doc: OrderDocument = {
       id: "D-" + Math.floor(Math.random() * 9000 + 1000),
       order_id: order.id,
-      driver_id: ME.id,
+      driver_id: "self",
       type,
       file_name: meta.label.replace(/[^a-zA-Z]/g, "") + "_" + order.plate.replace(/\s/g, "") + "." + ext,
       uploaded_at: isoOf(now),
@@ -169,7 +169,7 @@ function AddDocModal({
           </div>
         )}
         <div className="t-mut mt-2 flex items-center gap-1 text-[11.5px] leading-[1.5]">
-          <ShieldCheck size={12} /> Ablage tenant-sicher: <span className="t-mono">tenant/orders/{order.id}/{ME.id}_…</span>
+          <ShieldCheck size={12} /> Ablage tenant-sicher: <span className="t-mono">tenant/orders/{order.id}/beleg_…</span>
         </div>
       </div>
     </Modal>

@@ -17,7 +17,7 @@ import {
   isoWeek, fmtDate, fmtShort, checkAvailabilityLock, LOCK_REASON_DE,
 } from "@/lib/driver/date-utils";
 import { useLongPress } from "@/lib/driver/use-long-press";
-import { SHIFT_TPL, ME } from "@/lib/driver/mock-data";
+import { SHIFT_TPL } from "@/lib/driver/mock-data";
 import { saveAvailability } from "@/lib/driver/availability-data";
 import type { DriverAvailability, AvailabilityStatus } from "@/lib/driver/types";
 
@@ -36,7 +36,7 @@ function avTimeText(a: DriverAvailability): string {
 }
 
 function emptyAvail(date: string): DriverAvailability {
-  return { driver_id: ME.id, date, status: "abwesend", start_time: null, end_time: null, is_full_day: false, shift_code: null, order_ref: null };
+  return { driver_id: "self", date, status: "abwesend", start_time: null, end_time: null, is_full_day: false, shift_code: null, order_ref: null };
 }
 
 /* ---------- Tageszeile (Wochenansicht) ---------- */

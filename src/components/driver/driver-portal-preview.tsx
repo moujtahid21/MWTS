@@ -66,7 +66,14 @@ export function DriverPortalPreview() {
               </div>
 
               <div className="flex-1 px-4 pb-4 pt-4">
-                {screen === "dashboard" && <DashboardView />}
+                {screen === "dashboard" && (
+                  <DashboardView
+                    driverName="Amin Dahmouni"
+                    driverSub="Vorschau · Demo-Daten"
+                    orders={orders}
+                    availabilities={avail}
+                  />
+                )}
                 {screen === "time" && (
                   <div>
                     <PageHead title="Stempeluhr" sub="Arbeitszeit, Pausen & Wartezeit" />

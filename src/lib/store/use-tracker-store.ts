@@ -18,7 +18,6 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { captureGeo } from "@/lib/driver/geo";
 import type { StampType, TimeStamp } from "@/lib/driver/types";
-import { ME } from "@/lib/driver/mock-data";
 
 export type TrackerPhase = "idle" | "working" | "break" | "waiting";
 
@@ -49,7 +48,7 @@ async function stamp(label: string, type: StampType): Promise<TimeStamp> {
   const fix = await captureGeo();
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    driver_id: ME.id,
+    driver_id: "self",
     type,
     ts: new Date().toISOString(),
     lat: fix.lat,

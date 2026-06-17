@@ -14,7 +14,6 @@ import {
   fmtDate, checkAvailabilityLock,
 } from "@/lib/driver/date-utils";
 import { useNow, useHydrated } from "@/lib/driver/use-now";
-import { ME, seedAvailabilities, seedOrders } from "@/lib/driver/mock-data";
 import type { DriverAvailability, DriverOrder } from "@/lib/driver/types";
 
 function LiveClock() {
@@ -35,14 +34,21 @@ function LiveClock() {
 
 const greeting = (h: number) => (h < 11 ? "Guten Morgen" : h < 18 ? "Guten Tag" : "Guten Abend");
 
-export function DashboardView() {
+export interface DashboardProps {
+  driverName: string;
+  driverSub: string; // z. B. "Selbständig · Düsseldorf" oder "Fahrerprofil unvollständig"
+  orders: DriverOrder[];
+  availabilities: Record<string, DriverAvailability>;
+}
+
+export function DashboardView({ driverName, driverSub, orders, availabilities }: DashboardProps) {
   const now = useMemo(() => new Date(), []);
-  const orders: DriverOrder[] = useMemo(() => seedOrders(now), [now]);
-  const avail: Record<string, DriverAvailability> = useMemo(() => seedAvailabilities(now), [now]);
+  const avail = availabilities;
 
   const todayIso = isoOf(now);
   const active = orders.filter((o) => o.status === "angenommen" || o.status === "unterwegs");
   const todo = orders.filter((o) => o.status === "zugewiesen");
+  const done = orders.filter((o) => o.status === "fertig");
   const next = active[0] ?? todo[0];
 
   const weekStart = mondayOf(now);
@@ -51,7 +57,7 @@ export function DashboardView() {
 
   return (
     <div>
-      <PageHead title={`${greeting(now.getHours())}, ${ME.name.split(" ")[0]}`} sub={`${ME.team} · ${ME.type} · ${ME.contract_h}h/Woche`}>
+      <PageHead title={`${greeting(now.getHours())}, ${driverName.split(" ")[0]}`} sub={driverSub}>
         <LiveClock />
       </PageHead>
 
@@ -87,7 +93,7 @@ export function DashboardView() {
         {([
           ["Verfügbar diese Woche", `${availCount} / 7`, Calendar, "/fahrer/availability", "Tage eingetragen"],
           ["Aktive Aufträge", String(active.length + todo.length), ClipboardList, "/fahrer/orders", "zugewiesen"],
-          ["Bewertung", `${ME.rating} ★`, Star, null, `${ME.trips} Fahrten`],
+          ["Abgeschlossen", String(done.length), Star, null, "Aufträge gesamt"],
         ] as const).map(([l, v, Ic, href, sub]) => {
           const inner = (
             <>
