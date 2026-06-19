@@ -2,7 +2,7 @@
 
 /* ============================================================
    MW Transport Service — Einstellungen: Nutzerverwaltung
-   src/components/settings/users-settings.tsx
+   src/components/settings/user-settings.tsx
    ------------------------------------------------------------
    Tab-Inhalt für die Settings-Seite. Listet Tenant-Nutzer und öffnet
    das Einladungs-Modal. Einladung läuft über die Server Action
@@ -106,7 +106,7 @@ function InviteModal({ onClose, onDone }: { onClose: () => void; onDone: (msg: s
   );
 }
 
-export function UsersSettings() {
+export function UserSettings() {
   const toast = useToast();
   const [users, setUsers] = useState<TenantUser[]>([]);
   const [loading, startLoad] = useTransition();
