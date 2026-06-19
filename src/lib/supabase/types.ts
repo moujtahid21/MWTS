@@ -5,11 +5,14 @@
    are mapped to the camelCase / nested view-models the UI components
    already expect, so the refactor stays contained to the data boundary.
 
-   NOTE (Build-Fix): @supabase/supabase-js ≥ 2.x verlangt, dass JEDE
-   Tabelle im Database-Typ einen `Relationships`-Schlüssel hat. Fehlt er,
-   erkennt der getippte Client die Tabelle nicht und .insert()/.from()
-   fallen auf `never` zurück ("not assignable to parameter of type
-   'never[]'"). Daher steht `Relationships: []` an jeder Tabelle.
+   NOTE (Build-Fix): @supabase/supabase-js ≥ 2.74 (createServerClient aus
+   @supabase/ssr) verlangt am Database-Typ
+     • einen `__InternalSupabase`-Schlüssel mit `PostgrestVersion`
+     • und an JEDER Tabelle einen `Relationships`-Schlüssel.
+   Fehlt eines davon, bricht die Typinferenz komplett zusammen und alle
+   Queries/.insert() werden zu `never` ("not assignable to parameter of
+   type 'never[]'"). Beides ist unten gesetzt — exakt wie `supabase gen
+   types` es heute erzeugt.
    ============================================================ */
 
 export type Json =
@@ -167,6 +170,10 @@ export type InviteTokenInsert = Omit<
 
 /* ---------- Typed Database (for createClient<Database>()) ---------- */
 export interface Database {
+  // Pflicht ab supabase-js ≥ 2.74 — sonst resolved alles zu `never`.
+  __InternalSupabase: {
+    PostgrestVersion: "12";
+  };
   public: {
     Tables: {
       customers: {
