@@ -168,8 +168,12 @@ export type InviteTokenInsert = Omit<
   "id" | "created_at" | "used_at" | "used_by"
 > & { id?: string; used_at?: string | null; used_by?: string | null };
 
-/* ---------- Typed Database (for createClient<Database>()) ---------- */
-export interface Database {
+/* ---------- Typed Database (for createClient<Database>()) ----------
+   WICHTIG: `type`, NICHT `interface`. Ein interface ohne Index-Signatur
+   ist nicht dem internen `Record<string, GenericSchema>`-Constraint von
+   postgrest-js zuweisbar → Tabellen kollabieren auf `never` (genau der
+   `never[]`-Insert-Fehler). `supabase gen types` erzeugt ebenfalls `type`. */
+export type Database = {
   // Pflicht ab supabase-js ≥ 2.74 — sonst resolved alles zu `never`.
   __InternalSupabase: {
     PostgrestVersion: "12";
@@ -222,8 +226,9 @@ export interface Database {
     Views: Record<string, never>;
     Functions: Record<string, never>;
     Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
   };
-}
+};
 
 /* ============================================================
    View-models — the shapes orders.tsx / customers.tsx consume
