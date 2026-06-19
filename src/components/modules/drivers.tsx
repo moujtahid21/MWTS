@@ -10,13 +10,13 @@ import {
 import { MWDATA } from "@/lib/data";
 import { useAppNav, useModuleInitial } from "@/lib/use-app-nav";
 
-export function Drivers() {
+export function Drivers({initialDrivers, initialKpi}) {
   const onNav = useAppNav();
   const initial = useModuleInitial();
-  const kpi = MWDATA.kpi;
+  const kpi = initialKpi??MWDATA.kpi;
   const D = MWDATA;
   const toast = useToast();
-  const [list, setList] = useState(D.drivers);
+  const [list, setList] = useState(initialDrivers ?? D.drivers);
   const [q, setQ] = useState("");
   const [fType, setFType] = useState("all");
   const [detail, setDetail] = useState(null);
