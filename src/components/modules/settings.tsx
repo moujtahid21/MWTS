@@ -11,7 +11,7 @@ import {
 import { MWDATA } from "@/lib/data";
 import { useAppNav } from "@/lib/use-app-nav";
 import { useTenantStore, BRAND_PRESETS } from "@/lib/store/use-tenant-store";
-import {UsersSettings} from "@/components/settings/user-settings";
+import {UserSettings} from "@/components/settings/user-settings";
 
 export function Settings() {
   const toast = useToast();
@@ -25,7 +25,7 @@ export function Settings() {
     if (entry) setBrandStore(entry.name);
   };
   const [tab, setTab] = useState("brand");
-  const tabs = [["brand", "White-Label", "layers"], ["roles", "Rollen & Rechte", "shield"], ["security", "Sicherheit", "key"], ["tenant", "Mandant", "building"]];
+  const tabs = [["brand", "White-Label", "layers"], ["roles", "Rollen & Rechte", "shield"], ["security", "Sicherheit", "key"], ["tenant", "Mandant", "building"], ["users", "Nutzer", "drivers"]];
   const presets = [
     { h: 142, s: "71%", l: "38%", name: "Grün" }, { h: 217, s: "91%", l: "53%", name: "Blau" },
     { h: 173, s: "80%", l: "36%", name: "Türkis" }, { h: 245, s: "75%", l: "59%", name: "Indigo" },
@@ -141,6 +141,7 @@ export function Settings() {
               </div>
             </div>
           )}
+            {tab === "users" && <UserSettings />}
         </div>
       </div>
     </div>

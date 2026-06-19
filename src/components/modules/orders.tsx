@@ -14,6 +14,8 @@ import {
   assignOrderDriver, updateOrdersStatus,
 } from "@/actions/order-actions";
 import type { OrderVM } from "@/lib/supabase/types";
+import {getAssignableDrivers} from "@/actions/driver-actions";
+
 
 function OrderStatStrip({ kpi }) {
   const items = [
@@ -80,6 +82,7 @@ export function Orders() {
   const [showCreate, setShowCreate] = useState(!!initial?.create);
   const [detail, setDetail] = useState<OrderVM | null>(null);
   const [assignFor, setAssignFor] = useState<string | "bulk" | null>(null);
+  const [driverPool, setDriverPool] = useState<any[]>([]);
 
   // Fetch tenant-scoped orders from Supabase via the Server Action.
   const load = useCallback(async () => {
@@ -96,6 +99,8 @@ export function Orders() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => { getAssignableDrivers().then(setDriverPool); }, []);
 
   useEffect(() => {
     if (initial?.filter) setFStatus(initial.filter);
@@ -479,7 +484,7 @@ export function Orders() {
 
       {showCreate && <OrderForm D={D} onClose={() => setShowCreate(false)} onSave={createOrder} />}
       {detail && <OrderDetail order={detail} onClose={() => setDetail(null)} onAssign={() => setAssignFor(detail.id)} onCancel={() => cancelOrder(detail.id)} />}
-      {assignFor && <AssignDriver D={D} onClose={() => setAssignFor(null)} onPick={async (d) => {
+      {assignFor && <AssignDriver drivers={driverPool} onClose={() => setAssignFor(null)} onPick={async (d) => {
         if (assignFor === "bulk") {
           const ids = [...sel];
           setOrders(os => os.map(o => sel.has(o.id) ? { ...o, driver: d, status: "zugewiesen", jobType: d.type } : o));
@@ -585,9 +590,9 @@ function OrderDetail({ order, onClose, onAssign, onCancel }) {
 }
 
 /* ---------- Assign driver picker ---------- */
-function AssignDriver({ D, onClose, onPick }) {
+function AssignDriver({ drivers, onClose, onPick }) {
   const [q, setQ] = useState("");
-  const list = D.drivers.filter(d => d.active && (!q || d.name.toLowerCase().includes(q.toLowerCase()) || d.city.toLowerCase().includes(q.toLowerCase())));
+  const list = drivers.filter(d => d.active && (!q || d.name.toLowerCase().includes(q.toLowerCase()) || d.city.toLowerCase().includes(q.toLowerCase())));
   const order = ["available", "onjob", "offduty"];
   list.sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
   return (
