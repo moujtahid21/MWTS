@@ -7,15 +7,24 @@
    Use ONLY in Server Components, Route Handlers and Server Actions.
    NOTE: `cookies()` is async in Next.js 15+ — this factory is async too,
    so every caller must `await createClient()`.
+
+   BUILD-FIX (supabase-js ≥ 2.74 / ssr): die Generic-Weiterleitung in
+   `createServerClient<Database>` aus @supabase/ssr ist fehlerhaft und
+   lässt alle Queries auf `never` kollabieren ("not assignable to
+   parameter of type 'never[]'", siehe supabase-js #1738). Der reguläre
+   SupabaseClient<Database>-Typ aus @supabase/supabase-js ist dagegen
+   korrekt — daher casten wir die Instanz darauf. Laufzeitverhalten
+   bleibt identisch (es ist derselbe Client), nur die TYPEN werden geheilt.
    ============================================================ */
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 
-export async function createClient() {
+export async function createClient(): Promise<SupabaseClient<Database>> {
   const cookieStore = await cookies();
 
-  return createServerClient<Database>(
+  const client = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -37,4 +46,7 @@ export async function createClient() {
       },
     },
   );
+
+  // Heal the broken ssr generic by re-typing as the (correct) supabase-js client.
+  return client as unknown as SupabaseClient<Database>;
 }
