@@ -1,10 +1,15 @@
 /* ============================================================
    MW Transport Service — Supabase schema types + view-model mappers
    ------------------------------------------------------------
-   Strict row types for every table the app touches (Phase 2:
-   orders + customers). Snake_case DB rows are mapped to the
-   camelCase / nested view-models the UI components already expect,
-   so the refactor stays contained to the data boundary.
+   Strict row types for every table the app touches. Snake_case DB rows
+   are mapped to the camelCase / nested view-models the UI components
+   already expect, so the refactor stays contained to the data boundary.
+
+   NOTE (Build-Fix): @supabase/supabase-js ≥ 2.x verlangt, dass JEDE
+   Tabelle im Database-Typ einen `Relationships`-Schlüssel hat. Fehlt er,
+   erkennt der getippte Client die Tabelle nicht und .insert()/.from()
+   fallen auf `never` zurück ("not assignable to parameter of type
+   'never[]'"). Daher steht `Relationships: []` an jeder Tabelle.
    ============================================================ */
 
 export type Json =
@@ -93,6 +98,47 @@ export interface TenantRow {
   created_at: string;
 }
 
+export interface DriverRow {
+  id: string;
+  tenant_id: string;
+  user_id: string | null;
+  display_id: string;
+  name: string;
+  phone: string | null;
+  city: string | null;
+  job_type: string | null;
+  role: string;
+  created_at: string;
+}
+
+export interface DriverAvailabilityRow {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  driver_id: string | null;
+  date: string;
+  status: string;
+  start_time: string | null;
+  end_time: string | null;
+  is_full_day: boolean;
+  shift_code: string | null;
+  order_ref: number | null;
+  updated_at: string;
+}
+
+export interface InviteTokenRow {
+  id: string;
+  tenant_id: string;
+  token: string;
+  role: string;
+  email: string | null;
+  created_by: string | null;
+  expires_at: string;
+  used_at: string | null;
+  used_by: string | null;
+  created_at: string;
+}
+
 /* ---------- Insert payloads (tenant_id injected server-side) ---------- */
 export type CustomerInsert = Omit<
   CustomerRow,
@@ -104,6 +150,21 @@ export type OrderInsert = Omit<OrderRow, "id" | "created_at" | "order_no"> & {
   order_no?: number | null;
 };
 
+export type DriverInsert = Omit<DriverRow, "id" | "created_at" | "role"> & {
+  id?: string;
+  role?: string;
+};
+
+export type DriverAvailabilityInsert = Omit<
+  DriverAvailabilityRow,
+  "id" | "updated_at"
+> & { id?: string };
+
+export type InviteTokenInsert = Omit<
+  InviteTokenRow,
+  "id" | "created_at" | "used_at" | "used_by"
+> & { id?: string; used_at?: string | null; used_by?: string | null };
+
 /* ---------- Typed Database (for createClient<Database>()) ---------- */
 export interface Database {
   public: {
@@ -112,21 +173,43 @@ export interface Database {
         Row: CustomerRow;
         Insert: CustomerInsert;
         Update: Partial<CustomerInsert>;
+        Relationships: [];
       };
       orders: {
         Row: OrderRow;
         Insert: OrderInsert;
         Update: Partial<OrderInsert>;
+        Relationships: [];
       };
       memberships: {
         Row: MembershipRow;
         Insert: MembershipRow;
         Update: Partial<Pick<MembershipRow, "role">>;
+        Relationships: [];
       };
       tenants: {
         Row: TenantRow;
         Insert: Pick<TenantRow, "name"> & Partial<TenantRow>;
         Update: Partial<TenantRow>;
+        Relationships: [];
+      };
+      drivers: {
+        Row: DriverRow;
+        Insert: DriverInsert;
+        Update: Partial<DriverInsert>;
+        Relationships: [];
+      };
+      driver_availabilities: {
+        Row: DriverAvailabilityRow;
+        Insert: DriverAvailabilityInsert;
+        Update: Partial<DriverAvailabilityInsert>;
+        Relationships: [];
+      };
+      invite_tokens: {
+        Row: InviteTokenRow;
+        Insert: InviteTokenInsert;
+        Update: Partial<InviteTokenInsert>;
+        Relationships: [];
       };
     };
     Views: Record<string, never>;
